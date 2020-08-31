@@ -54,7 +54,7 @@ for aas in kappa_casein_fragments_alignment.iter_positions() {
     assert_eq!(aas.len(), 4); // 4 sequences
 }
 
-Ok(())
+# Ok(())
 # }
 ```
 
@@ -123,7 +123,7 @@ struct AlignmentPositionIterator<'a> {
     index: usize,
 }
 
-struct AlignmentRowIterator<'a> {
+struct AlignmentSequenceIterator<'a> {
     alignment: &'a Alignment,
     index: usize,
 }
@@ -140,7 +140,7 @@ impl<'a> Iterator for AlignmentPositionIterator<'a> {
     }
 }
 
-impl<'a> Iterator for AlignmentRowIterator<'a> {
+impl<'a> Iterator for AlignmentSequenceIterator<'a> {
     type Item = Vec<Option<&'a char>>;
     fn next(&mut self) -> Option<Vec<Option<&'a char>>> {
         if self.index >= self.alignment.n_sequences {
@@ -167,14 +167,14 @@ impl Alignment {
 
     /// Returns the fixed `length` of the Alignment `self`
     #[must_use]
-    pub const fn length(&self) -> usize {
-        self.length
+    pub const fn length(&self) -> &usize {
+        &self.length
     }
 
     /// Returns the number of sequences contained in `self`
     #[must_use]
-    pub const fn n_sequences(&self) -> usize {
-        self.n_sequences
+    pub const fn n_sequences(&self) -> &usize {
+        &self.n_sequences
     }
 
     /// Returns an Iterator over the positions of the alignment
@@ -187,7 +187,7 @@ impl Alignment {
 
     /// Returns an Iterator over the sequences of the alignment
     pub fn iter_sequences(&self) -> impl Iterator<Item = Vec<Option<&char>>> {
-        AlignmentRowIterator {
+        AlignmentSequenceIterator {
             alignment: self,
             index: 0_usize,
         }
@@ -265,7 +265,7 @@ impl Alignment {
         descriptions: Vec<Option<String>>,
         sequences: &[String],
     ) -> Result<Self, MultiSeqAlignError> {
-        assert!(names.len() == descriptions.len() && names.len() == sequences.len());
+        debug_assert!(names.len() == descriptions.len() && names.len() == sequences.len());
 
         let length = utils::first_sequence_length(sequences);
 
@@ -373,7 +373,7 @@ impl Alignment {
     /// Panics if `index` is greater or equal to the `n_sequences` of the Alignment.
     #[must_use]
     pub fn nth_sequence(&self, index: usize) -> Vec<Option<&char>> {
-        assert!(index < self.n_sequences);
+        debug_assert!(index < self.n_sequences);
         (0..self.length)
             .map(|i| self.sequences.get(i * self.length + index))
             .collect::<Vec<Option<&char>>>()
