@@ -8,6 +8,8 @@ Instead of storing aligned sequences as multiple strings, `multi_seq_align` stor
 
 ```rust
 # use multi_seq_align::Alignment;
+# use std::error::Error;
+# fn main() -> Result<(), Box<dyn Error>> {
 let mut kappa_casein_fragments_alignment = Alignment::create(
     vec![
         "P06796".to_string(), // Mouse
@@ -24,11 +26,11 @@ let mut kappa_casein_fragments_alignment = Alignment::create(
         "HAQIPQRQYLP".to_string(),
         "PAQILQWQVLS".to_string(),
     ],
-).unwrap();
+)?;
 
 // Let's extract a column of this alignment
 assert_eq!(
-    kappa_casein_fragments_alignment.nth(6),
+    kappa_casein_fragments_alignment.nth_position(6),
     [Some(&'W'), Some(&'R'), Some(&'W')]
 );
 
@@ -38,19 +40,28 @@ kappa_casein_fragments_alignment.add_aligned_sequence(
     "D0QJA9".to_string(),
     Some("D0QJA9_ORNAN".to_string()),
     "EHQRP--YVLP",
-).unwrap();
+)?;
 
 // the new aligned sequence has a gap at the 6th position
 assert_eq!(
-    kappa_casein_fragments_alignment.nth(6),
+    kappa_casein_fragments_alignment.nth_position(6),
     [Some(&'W'), Some(&'R'), Some(&'W'), Some(&'-')]
 );
+
+// We can also loop over each position of the alignment
+for aas in kappa_casein_fragments_alignment.iter_positions() {
+    println!("{:?}", aas);
+    assert_eq!(aas.len(), 4); // 4 sequences
+}
+
+Ok(())
+# }
 ```
 
 # Features
 
 - Create [`Alignment`] from one or multiple aligned sequences at once (see [`add_aligned_sequence()`] and [`create()`]).
-- Extract columns of the alignment (see [`nth()`]).
+- Extract columns of the alignment (see [`nth_position()`]).
 This crate is currently in early stage development. I wouldn't recommend using it in production but I am interested in possible ideas to further the developemt of this project. Quite some work needs toi be done to improve the API and make it easy to use in other project.
 # Ideas
 - Computation of conservation scores
@@ -67,7 +78,7 @@ This crate is currently in early stage development. I wouldn't recommend using i
 My goal is to reduce the footprint of this crate, there is ome work to do to achieve it. The code will eventually be optimised to be faster and to better use memory.
 
 [`Alignment`]: struct.Alignment.html
-[`nth()`]: struct.Alignment.html#method.nth
+[`nth_position()`]: struct.Alignment.html#method.nth
 [`add_aligned_sequence()`]: struct.Alignment.html#method.add_aligned_sequence
 [`create()`]: struct.Alignment.html#method.create
 */
@@ -107,7 +118,81 @@ impl Default for Alignment {
     }
 }
 
+struct AlignmentPositionIterator<'a> {
+    alignment: &'a Alignment,
+    index: usize,
+}
+
+struct AlignmentRowIterator<'a> {
+    alignment: &'a Alignment,
+    index: usize,
+}
+
+impl<'a> Iterator for AlignmentPositionIterator<'a> {
+    type Item = Vec<Option<&'a char>>;
+    fn next(&mut self) -> Option<Vec<Option<&'a char>>> {
+        if self.index >= self.alignment.length {
+            return None;
+        }
+        let col = self.alignment.nth_position(self.index);
+        self.index += 1;
+        Some(col)
+    }
+}
+
+impl<'a> Iterator for AlignmentRowIterator<'a> {
+    type Item = Vec<Option<&'a char>>;
+    fn next(&mut self) -> Option<Vec<Option<&'a char>>> {
+        if self.index >= self.alignment.n_sequences {
+            return None;
+        }
+        let col = self.alignment.nth_sequence(self.index);
+        self.index += 1;
+        Some(col)
+    }
+}
+
 impl Alignment {
+    /// Returns a vector of sequence names
+    #[must_use]
+    pub const fn names(&self) -> &Vec<String> {
+        &self.names
+    }
+
+    /// Returns a vector of sequence descriptions
+    #[must_use]
+    pub const fn descriptions(&self) -> &Vec<Option<String>> {
+        &self.descriptions
+    }
+
+    /// Returns the fixed `length` of the Alignment `self`
+    #[must_use]
+    pub const fn length(&self) -> usize {
+        self.length
+    }
+
+    /// Returns the number of sequences contained in `self`
+    #[must_use]
+    pub const fn n_sequences(&self) -> usize {
+        self.n_sequences
+    }
+
+    /// Returns an Iterator over the positions of the alignment
+    pub fn iter_positions(&self) -> impl Iterator<Item = Vec<Option<&char>>> {
+        AlignmentPositionIterator {
+            alignment: self,
+            index: 0_usize,
+        }
+    }
+
+    /// Returns an Iterator over the sequences of the alignment
+    pub fn iter_sequences(&self) -> impl Iterator<Item = Vec<Option<&char>>> {
+        AlignmentRowIterator {
+            alignment: self,
+            index: 0_usize,
+        }
+    }
+
     /// Returns an empty `Alignment` of fixed `length`
     ///
     ///
@@ -145,18 +230,6 @@ impl Alignment {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.n_sequences == 0_usize
-    }
-
-    /// Returns the fixed `length` of the Alignment `self`
-    #[must_use]
-    pub const fn length(&self) -> usize {
-        self.length
-    }
-
-    /// Returns the number of sequences contained in `self`
-    #[must_use]
-    pub const fn n_sequences(&self) -> usize {
-        self.n_sequences
     }
 
     /// Create an `Alignment` from same length vectors of names, descriptions, sequences
@@ -275,11 +348,34 @@ impl Alignment {
     /// // TODO
     ///
     /// ```
+    /// # Panics
+    ///
+    /// Panics if `n` is greater or equal to the `length` of the Alignment.
     #[must_use]
-    pub fn nth(&self, n: usize) -> Vec<Option<&char>> {
+    pub fn nth_position(&self, n: usize) -> Vec<Option<&char>> {
         assert!(n < self.length);
         (0..self.n_sequences)
             .map(|i| self.sequences.get(i * self.length + n))
+            .collect::<Vec<Option<&char>>>()
+    }
+
+    /// Returns all amino acids / bases of the sequence at the `index` of the Alignment `self`. The returned vector has a length equal to the length of the Alignment `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use multi_seq_align::Alignment;
+    /// // TODO
+    ///
+    /// ```
+    /// # Panics
+    ///
+    /// Panics if `index` is greater or equal to the `n_sequences` of the Alignment.
+    #[must_use]
+    pub fn nth_sequence(&self, index: usize) -> Vec<Option<&char>> {
+        assert!(index < self.n_sequences);
+        (0..self.length)
+            .map(|i| self.sequences.get(i * self.length + index))
             .collect::<Vec<Option<&char>>>()
     }
 }
@@ -333,7 +429,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(align.n_sequences, 3_usize);
-        assert_eq!(align.nth(3), vec![Some(&'H'), Some(&'-'), Some(&'Y')])
+        assert_eq!(
+            align.nth_position(3),
+            vec![Some(&'H'), Some(&'-'), Some(&'Y')]
+        )
     }
 
     #[test]
@@ -396,7 +495,7 @@ mod tests {
             &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
         )
         .unwrap();
-        assert_eq!(align.nth(3), vec![Some(&'H'), Some(&'-')])
+        assert_eq!(align.nth_position(3), vec![Some(&'H'), Some(&'-')])
     }
 
     #[test]
@@ -418,7 +517,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            align.nth(3),
+            align.nth_position(3),
             vec![Some(&'H'), Some(&'-'), Some(&'W'), Some(&'M')]
         )
     }
@@ -432,7 +531,7 @@ mod tests {
             &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
         )
         .unwrap();
-        let _out_of_bonds = align.nth(10);
+        let _out_of_bonds = align.nth_position(10);
     }
 
     #[test]
@@ -450,5 +549,80 @@ mod tests {
             found_lengths: vec![11],
         };
         assert_eq!(error, expected);
+    }
+
+    #[test]
+    fn for_names() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
+            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+        )
+        .unwrap();
+
+        let mut x: Vec<&String> = Vec::new();
+
+        for name in align.names() {
+            x.push(name);
+        }
+
+        assert_eq!(x, vec!["NAME1", "NAME2"]);
+    }
+
+    #[test]
+    fn for_columns() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
+            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+        )
+        .unwrap();
+
+        let mut x = Vec::new();
+
+        for col in align.iter_positions() {
+            x.push(col);
+        }
+
+        assert_eq!(x.get(0).unwrap(), &[Some(&'A'), Some(&'V')]);
+        assert_eq!(x.get(3).unwrap(), &[Some(&'H'), Some(&'-')]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn for_columns_out_of_bonds() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
+            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+        )
+        .unwrap();
+
+        let mut x = Vec::new();
+
+        for col in align.iter_positions() {
+            x.push(col);
+        }
+
+        let _ = x.get(22).unwrap();
+    }
+
+    #[test]
+    fn for_sequences() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
+            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+        )
+        .unwrap();
+
+        let mut x = Vec::new();
+
+        for row in align.iter_sequences() {
+            assert_eq!(row.len(), 8);
+            x.push(row);
+        }
+
+        assert_eq!(x.len(), 2)
     }
 }
