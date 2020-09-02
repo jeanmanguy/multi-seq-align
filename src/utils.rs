@@ -12,7 +12,7 @@ pub fn first_sequence_length<T>(sequences: &[Vec<T>]) -> usize {
 #[inline]
 pub fn check_unequal_lengths<T>(
     seqs: &[Vec<T>],
-    names: &[String],
+    // names: &[String],
     expected: usize,
 ) -> Result<(), MultiSeqAlignError> {
     let mismatches: (Vec<usize>, Vec<usize>) = seqs
@@ -32,11 +32,6 @@ pub fn check_unequal_lengths<T>(
     } else {
         Err(MultiSeqAlignError::MultipleSequencesOfDifferentLengths {
             expected_length: expected,
-            sequences_names: mismatches
-                .0
-                .iter()
-                .map(|i| names.get(*i).unwrap().clone())
-                .collect(),
             found_lengths: mismatches.1,
         })
     }
@@ -49,16 +44,11 @@ mod tests {
 
     #[test]
     fn unequal_lengths_1() {
-        let error = crate::utils::check_unequal_lengths(
-            &[b"ILK".to_vec(), b"ILKS".to_vec()],
-            &[String::from("seq1"), String::from("seq2")],
-            3,
-        )
-        .err()
-        .unwrap();
+        let error = crate::utils::check_unequal_lengths(&[b"ILK".to_vec(), b"ILKS".to_vec()], 3)
+            .err()
+            .unwrap();
         let expected = MultiSeqAlignError::MultipleSequencesOfDifferentLengths {
             expected_length: 3,
-            sequences_names: vec![String::from("seq2")],
             found_lengths: vec![4],
         };
         assert_eq!(error, expected);
@@ -73,19 +63,12 @@ mod tests {
                 b"ILK".to_vec(),
                 b"ILKSS".to_vec(),
             ],
-            &[
-                String::from("seq1"),
-                String::from("seq2"),
-                String::from("seq3"),
-                String::from("seq4"),
-            ],
             3,
         )
         .err()
         .unwrap();
         let expected = MultiSeqAlignError::MultipleSequencesOfDifferentLengths {
             expected_length: 3,
-            sequences_names: vec![String::from("seq2"), String::from("seq4")],
             found_lengths: vec![4, 5],
         };
         assert_eq!(error, expected);

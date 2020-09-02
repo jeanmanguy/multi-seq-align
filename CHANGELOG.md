@@ -10,7 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  
 ### Changed
 
+
 ### Removed
+
+## [0.2.0] - 2020-09-02
+
+### Added 
+
+- `FromIterator::from_iter`
+
+### Changed
+
+- removed names and descriptions for sequences, out of scope of this package
+- renamed `add_aligned_sequence` to `add`
+- renamed `create` to `with_sequences`
 
 ## [0.1.0] - 2020-09-02
 
