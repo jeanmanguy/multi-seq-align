@@ -20,6 +20,8 @@ publish = false
 [dependencies]
 thiserror = "1.0"
 displaydoc = "0.1"
+serde = { version = "1.0", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"
+

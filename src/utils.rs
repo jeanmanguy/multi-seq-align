@@ -1,7 +1,7 @@
 use crate::errors::MultiSeqAlignError;
 
 #[inline]
-pub fn first_sequence_length(sequences: &[String]) -> usize {
+pub fn first_sequence_length<T>(sequences: &[Vec<T>]) -> usize {
     match sequences.get(0) {
         Some(seq) => seq.len(),
         None => 0_usize,
@@ -10,8 +10,8 @@ pub fn first_sequence_length(sequences: &[String]) -> usize {
 
 // Returns a tuple of vector of indices and vector of found lengths
 #[inline]
-pub fn check_unequal_lengths(
-    seqs: &[String],
+pub fn check_unequal_lengths<T>(
+    seqs: &[Vec<T>],
     names: &[String],
     expected: usize,
 ) -> Result<(), MultiSeqAlignError> {
@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn unequal_lengths_1() {
         let error = crate::utils::check_unequal_lengths(
-            &[String::from("ILK"), String::from("ILKS")],
+            &[b"ILK".to_vec(), b"ILKS".to_vec()],
             &[String::from("seq1"), String::from("seq2")],
             3,
         )
@@ -68,10 +68,10 @@ mod tests {
     fn unequal_lengths_2() {
         let error = crate::utils::check_unequal_lengths(
             &[
-                String::from("ILK"),
-                String::from("ILKS"),
-                String::from("ILK"),
-                String::from("SILKS"),
+                b"ELK".to_vec(),
+                b"ILKS".to_vec(),
+                b"ILK".to_vec(),
+                b"ILKSS".to_vec(),
             ],
             &[
                 String::from("seq1"),

@@ -17,35 +17,35 @@ let mut kappa_casein_fragments_alignment = Alignment::create(
         "P02668".to_string(), // Cattle
     ],
     vec![
-        Some("CASK_MOUSE".to_string()),
-        Some("CASK_HUMAN".to_string()),
-        Some("CASK_BOVIN".to_string()),
+        "CASK_MOUSE".to_string(),
+        "CASK_HUMAN".to_string(),
+        "CASK_BOVIN".to_string(),
     ],
     &[
-        "PAPISKWQSMP".to_string(),
-        "HAQIPQRQYLP".to_string(),
-        "PAQILQWQVLS".to_string(),
+        b"PAPISKWQSMP".to_vec(),
+        b"HAQIPQRQYLP".to_vec(),
+        b"PAQILQWQVLS".to_vec(),
     ],
 )?;
 
 // Let's extract a column of this alignment
 assert_eq!(
-    kappa_casein_fragments_alignment.nth_position(6),
-    [Some(&'W'), Some(&'R'), Some(&'W')]
+    kappa_casein_fragments_alignment.nth_position(6).unwrap(),
+    [&b'W', &b'R', &b'W']
 );
 
 // But we also have the aligned sequence for the Platypus
 // Let's add it to the original alignment
 kappa_casein_fragments_alignment.add_aligned_sequence(
     "D0QJA9".to_string(),
-    Some("D0QJA9_ORNAN".to_string()),
-    "EHQRP--YVLP",
+    "D0QJA9_ORNAN".to_string(),
+    b"EHQRP--YVLP".to_vec(),
 )?;
 
 // the new aligned sequence has a gap at the 6th position
 assert_eq!(
-    kappa_casein_fragments_alignment.nth_position(6),
-    [Some(&'W'), Some(&'R'), Some(&'W'), Some(&'-')]
+    kappa_casein_fragments_alignment.nth_position(6).unwrap(),
+    [&b'W', &b'R', &b'W', &b'-']
 );
 
 // We can also loop over each position of the alignment
@@ -57,6 +57,8 @@ for aas in kappa_casein_fragments_alignment.iter_positions() {
 # Ok(())
 # }
 ```
+
+Here I instancied an alignment using `u8`, but `Alignment` works on generics like numbers, custom or third-party structs.
 
 # Features
 
@@ -89,70 +91,148 @@ mod utils;
 
 use errors::MultiSeqAlignError;
 
+#[cfg(feature = "serde")]
+#[macro_use]
+extern crate serde;
+
 /// An alignment of DNA or amino acids sequences
 ///
 /// Aligned sequences should all have the same length. Each sequence is stored as one vector of `char`s. This allows an easy access to columns and rows of the alignment.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)] // Use Rc to implement Copy
-pub struct Alignment {
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Alignment<T> {
     /// Sequence names
     names: Vec<String>,
     /// Sequence descriptions
-    descriptions: Vec<Option<String>>,
+    descriptions: Vec<String>,
     /// Sequences (as one)
-    sequences: Vec<char>,
+    sequences: Vec<T>,
     /// The number of sequences in the alignment
     n_sequences: usize,
     /// The length of the alignment
     length: usize,
 }
 
-impl Default for Alignment {
+impl<T> Default for Alignment<T>
+where
+    T: Clone,
+{
     fn default() -> Self {
         Self {
             names: Vec::<String>::default(),
-            descriptions: Vec::<Option<String>>::default(),
-            sequences: Vec::<char>::default(),
+            descriptions: Vec::<String>::default(),
+            sequences: Vec::<T>::default(),
             n_sequences: 0_usize,
             length: 0_usize,
         }
     }
 }
-
-struct AlignmentPositionIterator<'a> {
-    alignment: &'a Alignment,
+struct AlignmentPositionIterator<'a, T> {
+    alignment: &'a Alignment<T>,
     index: usize,
+    size_hint: usize,
 }
 
-struct AlignmentSequenceIterator<'a> {
-    alignment: &'a Alignment,
-    index: usize,
-}
-
-impl<'a> Iterator for AlignmentPositionIterator<'a> {
-    type Item = Vec<Option<&'a char>>;
-    fn next(&mut self) -> Option<Vec<Option<&'a char>>> {
+impl<'a, T> Iterator for AlignmentPositionIterator<'a, T>
+where
+    T: Clone,
+{
+    type Item = Vec<&'a T>;
+    fn next(&mut self) -> Option<Vec<&'a T>> {
         if self.index >= self.alignment.length {
             return None;
         }
-        let col = self.alignment.nth_position(self.index);
-        self.index += 1;
-        Some(col)
+        match self.alignment.nth_position(self.index) {
+            Some(position) => {
+                self.index = self.index.saturating_add(1);
+                self.size_hint = self.size_hint.saturating_sub(1);
+                Some(position)
+            }
+            None => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.size_hint < usize::max_value() {
+            // ?
+            (self.size_hint, Some(self.size_hint))
+        } else {
+            (usize::max_value(), None)
+        }
     }
 }
 
-impl<'a> Iterator for AlignmentSequenceIterator<'a> {
-    type Item = Vec<Option<&'a char>>;
-    fn next(&mut self) -> Option<Vec<Option<&'a char>>> {
+impl<'a, T> ExactSizeIterator for AlignmentPositionIterator<'a, T>
+where
+    T: Clone,
+{
+    fn len(&self) -> usize {
+        let (lower, upper) = self.size_hint();
+        // Note: This assertion is overly defensive, but it checks the invariant
+        // guaranteed by the trait. If this trait were rust-internal,
+        // we could use debug_assert!; assert_eq! will check all Rust user
+        // implementations too.
+        assert_eq!(upper, Some(lower));
+        lower
+    }
+}
+
+struct AlignmentSequenceIterator<'a, T> {
+    alignment: &'a Alignment<T>,
+    index: usize,
+    size_hint: usize,
+}
+
+impl<'a, T> Iterator for AlignmentSequenceIterator<'a, T>
+where
+    T: Clone,
+{
+    type Item = Vec<&'a T>;
+    fn next(&mut self) -> Option<Vec<&'a T>> {
         if self.index >= self.alignment.n_sequences {
             return None;
         }
-        let col = self.alignment.nth_sequence(self.index);
-        self.index += 1;
-        Some(col)
+
+        match self.alignment.nth_sequence(self.index) {
+            Some(seq) => {
+                self.index = self.index.saturating_add(1);
+                self.size_hint = self.size_hint.saturating_sub(1);
+                Some(seq)
+            }
+            None => None,
+        }
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.alignment.nth_sequence(n)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.size_hint < usize::max_value() {
+            // ?
+            (self.size_hint, Some(self.size_hint))
+        } else {
+            (usize::max_value(), None)
+        }
     }
 }
 
-impl Alignment {
+impl<'a, T> ExactSizeIterator for AlignmentSequenceIterator<'a, T>
+where
+    T: Clone,
+{
+    fn len(&self) -> usize {
+        let (lower, upper) = self.size_hint();
+        // Note: This assertion is overly defensive, but it checks the invariant
+        // guaranteed by the trait. If this trait were rust-internal,
+        // we could use debug_assert!; assert_eq! will check all Rust user
+        // implementations too.
+        assert_eq!(upper, Some(lower));
+        lower
+    }
+}
+
+impl<T> Alignment<T> {
     /// Returns a vector of sequence names
     #[must_use]
     pub const fn names(&self) -> &Vec<String> {
@@ -161,7 +241,7 @@ impl Alignment {
 
     /// Returns a vector of sequence descriptions
     #[must_use]
-    pub const fn descriptions(&self) -> &Vec<Option<String>> {
+    pub const fn descriptions(&self) -> &Vec<String> {
         &self.descriptions
     }
 
@@ -178,18 +258,30 @@ impl Alignment {
     }
 
     /// Returns an Iterator over the positions of the alignment
-    pub fn iter_positions(&self) -> impl Iterator<Item = Vec<Option<&char>>> {
+    pub fn iter_positions(
+        &self,
+    ) -> impl Iterator<Item = Vec<&T>> + ExactSizeIterator<Item = Vec<&T>>
+    where
+        T: Clone,
+    {
         AlignmentPositionIterator {
             alignment: self,
             index: 0_usize,
+            size_hint: self.length,
         }
     }
 
     /// Returns an Iterator over the sequences of the alignment
-    pub fn iter_sequences(&self) -> impl Iterator<Item = Vec<Option<&char>>> {
+    pub fn iter_sequences(
+        &self,
+    ) -> impl Iterator<Item = Vec<&T>> + ExactSizeIterator<Item = Vec<&T>>
+    where
+        T: Clone,
+    {
         AlignmentSequenceIterator {
             alignment: self,
             index: 0_usize,
+            size_hint: self.n_sequences,
         }
     }
 
@@ -200,10 +292,10 @@ impl Alignment {
     ///
     /// ```rust
     ///  # use multi_seq_align::Alignment;
-    ///  let alignment = Alignment::new(42);
+    ///  let alignment = Alignment::<char>::new(42);
     ///
-    ///  assert_eq!(alignment.length(), 42);
-    ///  assert_eq!(alignment.n_sequences(), 0);
+    ///  assert_eq!(*alignment.length(), 42 as usize);
+    ///  assert_eq!(*alignment.n_sequences(), 0 as usize);
     /// ```
     #[must_use]
     pub const fn new(length: usize) -> Self {
@@ -223,8 +315,8 @@ impl Alignment {
     ///
     /// ```rust
     /// # use multi_seq_align::Alignment;
-    /// let alignment = Alignment::new(42);
-    ///
+    /// let alignment = Alignment::<char>::new(42);
+    /// println!("\n\n>>> {:?} \n^^^^", alignment);
     /// assert!(alignment.is_empty())
     ///```
     #[must_use]
@@ -244,17 +336,17 @@ impl Alignment {
     ///         "ELMI001939".to_string(),
     ///         "ELMI001938".to_string(),
     ///     ],
-    ///     vec![None, None, None],
+    ///     vec!["".to_string(), "".to_string(), "".to_string()],
     ///     &[
-    ///         "AVEQTPRK".to_string(),
-    ///         "SVEQTPRK".to_string(),
-    ///         "SVEQTPKK".to_string(),
+    ///         b"AVEQTPRK".to_vec(),
+    ///         b"SVEQTPRK".to_vec(),
+    ///         b"SVEQTPKK".to_vec(),
     ///     ],
     /// )
     /// .unwrap();
     ///
-    /// assert_eq!(align.length(), 8);
-    /// assert_eq!(align.n_sequences(), 3);
+    /// assert_eq!(*align.length(), 8);
+    /// assert_eq!(*align.n_sequences(), 3);
     /// ```
     ///
     /// # Errors
@@ -262,25 +354,25 @@ impl Alignment {
     /// Will return an error if `names`, `descriptions` and `sequences` have different lengths, and also if the sequences have different lengths (based on the first sequence).
     pub fn create(
         names: Vec<String>,
-        descriptions: Vec<Option<String>>,
-        sequences: &[String],
-    ) -> Result<Self, MultiSeqAlignError> {
+        descriptions: Vec<String>,
+        sequences: &[Vec<T>],
+    ) -> Result<Self, MultiSeqAlignError>
+    where
+        T: Clone,
+    {
         debug_assert!(names.len() == descriptions.len() && names.len() == sequences.len());
 
         let length = utils::first_sequence_length(sequences);
-
         utils::check_unequal_lengths(sequences, &names, length)?;
 
         let n_sequences = sequences.len();
-        let mut sequences_char: Vec<char> = Vec::with_capacity(n_sequences * length);
-        sequences.iter().for_each(|seq| {
-            seq.chars().for_each(|c| sequences_char.push(c));
-        });
+
+        let sequences_vec = sequences.iter().flat_map(|x| x.to_vec()).collect();
 
         Ok(Self {
             names,
             descriptions,
-            sequences: sequences_char,
+            sequences: sequences_vec,
             n_sequences,
             length,
         })
@@ -296,19 +388,19 @@ impl Alignment {
     /// # use multi_seq_align::Alignment;
     /// let mut align = Alignment::new(8);
     ///
-    // assert_eq!(align.n_sequences(), 0);
+    ///  assert_eq!(*align.n_sequences(), 0);
     ///
     /// align
-    ///     .add_aligned_sequence("ELMI001940".to_string(), None, "AVEQTPRK")
+    ///     .add_aligned_sequence("ELMI001940".to_string(), "".to_string(), b"AVEQTPRK".to_vec())
     ///     .unwrap();
     ///
-    /// assert_eq!(align.n_sequences(), 1);
+    /// assert_eq!(*align.n_sequences(), 1);
     ///
     /// align
-    ///     .add_aligned_sequence("ELMI001939".to_string(), None, "SVEQTPRK")
+    ///     .add_aligned_sequence("ELMI001939".to_string(), "".to_string(), b"SVEQTPRK".to_vec())
     ///     .unwrap();
     ///
-    /// assert_eq!(align.n_sequences(), 2);
+    /// assert_eq!(*align.n_sequences(), 2);
     /// ```
     ///
     /// # Errors
@@ -317,8 +409,8 @@ impl Alignment {
     pub fn add_aligned_sequence<'a>(
         &'a mut self,
         name: String,
-        description: Option<String>,
-        sequence: &str,
+        description: String,
+        sequence: Vec<T>,
     ) -> Result<&'a mut Self, MultiSeqAlignError> {
         if sequence.len() != self.length {
             return Err(MultiSeqAlignError::NewSequenceOfDifferentLength {
@@ -332,7 +424,7 @@ impl Alignment {
 
         self.descriptions.push(description);
 
-        self.sequences.extend(sequence.chars());
+        self.sequences.extend(sequence);
 
         self.n_sequences += 1;
 
@@ -345,18 +437,26 @@ impl Alignment {
     ///
     /// ```rust
     /// # use multi_seq_align::Alignment;
-    /// // TODO
+    /// let align = Alignment::<u8>::create(
+    ///     vec!["testname1".to_string(), "testname2".to_string()],
+    ///     vec!["desc1".to_string(), "desc2".to_string()],
+    ///     &[b"ELK".to_vec(), b"ILK".to_vec()],
+    /// )
+    /// .unwrap();
     ///
+    /// assert_eq!(align.nth_position(0).unwrap(), &[&b'E', &b'I']);
     /// ```
     /// # Panics
     ///
     /// Panics if `n` is greater or equal to the `length` of the Alignment.
     #[must_use]
-    pub fn nth_position(&self, n: usize) -> Vec<Option<&char>> {
+    pub fn nth_position(&self, n: usize) -> Option<Vec<&T>> {
         assert!(n < self.length);
         (0..self.n_sequences)
             .map(|i| self.sequences.get(i * self.length + n))
-            .collect::<Vec<Option<&char>>>()
+            .collect::<Vec<Option<&T>>>()
+            .into_iter()
+            .collect::<Option<Vec<&T>>>()
     }
 
     /// Returns all amino acids / bases of the sequence at the `index` of the Alignment `self`. The returned vector has a length equal to the length of the Alignment `self`.
@@ -365,18 +465,27 @@ impl Alignment {
     ///
     /// ```rust
     /// # use multi_seq_align::Alignment;
-    /// // TODO
+    /// let align = Alignment::<u8>::create(
+    ///     vec!["testname1".to_string(), "testname2".to_string()],
+    ///     vec!["desc1".to_string(), "desc2".to_string()],
+    ///     &[b"ELK".to_vec(), b"ILK".to_vec()],
+    /// )
+    /// .unwrap();
     ///
+    /// assert_eq!(align.nth_sequence(1).unwrap(), &[&b'I', &b'L', &b'K']);
     /// ```
     /// # Panics
     ///
     /// Panics if `index` is greater or equal to the `n_sequences` of the Alignment.
     #[must_use]
-    pub fn nth_sequence(&self, index: usize) -> Vec<Option<&char>> {
+    pub fn nth_sequence(&self, index: usize) -> Option<Vec<&T>> {
         debug_assert!(index < self.n_sequences);
+
         (0..self.length)
-            .map(|i| self.sequences.get(i * self.length + index))
-            .collect::<Vec<Option<&char>>>()
+            .map(|i| self.sequences.get(self.length * index + i))
+            .collect::<Vec<Option<&T>>>()
+            .into_iter()
+            .collect::<Option<Vec<&T>>>()
     }
 }
 
@@ -387,7 +496,7 @@ mod tests {
 
     #[test]
     fn new_align() {
-        let x = Alignment::new(5_usize);
+        let x = Alignment::<char>::new(5_usize);
         assert!(x.names.is_empty());
         assert!(x.sequences.is_empty());
         assert_eq!(x.length, 5_usize);
@@ -396,21 +505,21 @@ mod tests {
 
     #[test]
     fn new_alignment_with_desc() {
-        let x = Alignment::create(
-            vec![String::from("testname1"), String::from("testname2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ELK"), String::from("ILK")],
+        let x = Alignment::<u8>::create(
+            vec!["testname1".to_string(), "testname2".to_string()],
+            vec!["desc1".to_string(), "desc2".to_string()],
+            &[b"ELK".to_vec(), b"ILK".to_vec()],
         )
         .unwrap();
         assert_eq!(
             x.names,
-            vec![String::from("testname1"), String::from("testname2")]
+            vec!["testname1".to_string(), "testname2".to_string()]
         );
         assert_eq!(
             x.descriptions,
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))]
+            vec!["desc1".to_string(), "desc2".to_string()]
         );
-        assert_eq!(x.sequences, vec!['E', 'L', 'K', 'I', 'L', 'K']);
+        assert_eq!(x.sequences, vec![b'E', b'L', b'K', b'I', b'L', b'K']);
         assert_eq!(x.length, 3);
         assert_eq!(x.n_sequences, 2);
     }
@@ -419,20 +528,17 @@ mod tests {
     fn add_1_sequence() {
         let mut align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
 
         align
-            .add_aligned_sequence(String::from("added1"), None, "ALRYITAT")
+            .add_aligned_sequence("added1".to_string(), "".to_string(), b"ALRYITAT".to_vec())
             .unwrap();
 
         assert_eq!(align.n_sequences, 3_usize);
-        assert_eq!(
-            align.nth_position(3),
-            vec![Some(&'H'), Some(&'-'), Some(&'Y')]
-        )
+        assert_eq!(align.nth_position(3).unwrap(), vec![&b'H', &b'-', &b'Y'])
     }
 
     #[test]
@@ -441,10 +547,8 @@ mod tests {
         let error = x
             .add_aligned_sequence(
                 String::from("too_long"),
-                Some(String::from(
-                    "add sequence of length 5 to an alignment of length 3",
-                )),
-                "ILKAV",
+                "add sequence of length 5 to an alignment of length 3".to_string(),
+                b"ILKAV".to_vec(),
             )
             .err()
             .unwrap();
@@ -460,7 +564,7 @@ mod tests {
     fn add_to_new() {
         let mut x = Alignment::new(3_usize);
 
-        x.add_aligned_sequence(String::from("sequence1"), None, "ILK")
+        x.add_aligned_sequence("sequence1".to_string(), "".to_string(), b"ELK".to_vec())
             .unwrap();
         assert_eq!(x.n_sequences, 1_usize);
         assert_eq!(x.length, 3_usize);
@@ -468,7 +572,7 @@ mod tests {
         assert_eq!(x.descriptions.len(), 1_usize);
         assert_eq!(x.sequences.len(), 3_usize);
 
-        x.add_aligned_sequence(String::from("sequence2"), None, "ELK")
+        x.add_aligned_sequence("sequence2".to_string(), "".to_string(), b"ILK".to_vec())
             .unwrap();
 
         assert_eq!(x.n_sequences, 2_usize);
@@ -482,7 +586,7 @@ mod tests {
     fn empty_align() {
         let mut x = Alignment::new(3_usize);
         assert!(x.is_empty());
-        x.add_aligned_sequence(String::from("sequence1"), None, "ILK")
+        x.add_aligned_sequence(String::from("sequence1"), "".to_string(), b"ILK".to_vec())
             .unwrap();
         assert!(!x.is_empty());
     }
@@ -491,11 +595,11 @@ mod tests {
     fn nth_residues_3() {
         let align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
-        assert_eq!(align.nth_position(3), vec![Some(&'H'), Some(&'-')])
+        assert_eq!(align.nth_position(3).unwrap(), vec![&b'H', &b'-'])
     }
 
     #[test]
@@ -507,18 +611,18 @@ mod tests {
                 "seq3".to_string(),
                 "seq4".to_string(),
             ],
-            vec![None, None, None, None],
+            vec!["".to_string(); 4],
             &[
-                "ALKHITAN".to_string(),
-                "VLK-ITAN".to_string(),
-                "ALKWITAN".to_string(),
-                "VLKMITAN".to_string(),
+                b"ALKHITAN".to_vec(),
+                b"VLK-ITAN".to_vec(),
+                b"ALKWITAN".to_vec(),
+                b"VLKMITAN".to_vec(),
             ],
         )
         .unwrap();
         assert_eq!(
-            align.nth_position(3),
-            vec![Some(&'H'), Some(&'-'), Some(&'W'), Some(&'M')]
+            align.nth_position(3).unwrap(),
+            vec![&b'H', &b'-', &b'W', &b'M']
         )
     }
 
@@ -527,8 +631,8 @@ mod tests {
     fn nth_residues_out() {
         let align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
         let _out_of_bonds = align.nth_position(10);
@@ -538,11 +642,12 @@ mod tests {
     fn different_seq_lengths() {
         let error = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITANLLL")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN---".to_vec()],
         )
         .err()
         .unwrap();
+
         let expected = MultiSeqAlignError::MultipleSequencesOfDifferentLengths {
             expected_length: 8,
             sequences_names: vec![String::from("NAME2")],
@@ -553,10 +658,10 @@ mod tests {
 
     #[test]
     fn for_names() {
-        let align = Alignment::create(
-            vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+        let align = Alignment::<u8>::create(
+            vec!["NAME1".to_string(), "NAME2".to_string()],
+            vec!["desc1".to_string(), "desc2".to_string()],
+            &[b"ELK".to_vec(), b"ILK".to_vec()],
         )
         .unwrap();
 
@@ -570,11 +675,11 @@ mod tests {
     }
 
     #[test]
-    fn for_columns() {
+    fn for_positions() {
         let align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
 
@@ -584,20 +689,20 @@ mod tests {
             x.push(col);
         }
 
-        assert_eq!(x.get(0).unwrap(), &[Some(&'A'), Some(&'V')]);
-        assert_eq!(x.get(3).unwrap(), &[Some(&'H'), Some(&'-')]);
+        assert_eq!(x.len(), 8);
+        assert_eq!(x.get(0).unwrap(), &[&b'A', &b'V']);
+        assert_eq!(x.get(3).unwrap(), &[&b'H', &b'-']);
     }
 
     #[test]
     #[should_panic]
-    fn for_columns_out_of_bonds() {
+    fn for_positions_out_of_bonds() {
         let align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
-
         let mut x = Vec::new();
 
         for col in align.iter_positions() {
@@ -608,11 +713,24 @@ mod tests {
     }
 
     #[test]
+    fn for_positions_exact() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
+        )
+        .unwrap();
+
+        assert_eq!(align.iter_positions().len(), 8);
+        assert_eq!(align.iter_positions().next().unwrap().len(), 2);
+    }
+
+    #[test]
     fn for_sequences() {
         let align = Alignment::create(
             vec![String::from("NAME1"), String::from("NAME2")],
-            vec![Some(String::from("desc1")), Some(String::from("desc2"))],
-            &[String::from("ALKHITAN"), String::from("VLK-ITAN")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
         )
         .unwrap();
 
@@ -624,5 +742,31 @@ mod tests {
         }
 
         assert_eq!(x.len(), 2)
+    }
+
+    #[test]
+    fn for_sequences_exact() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
+        )
+        .unwrap();
+
+        assert_eq!(align.iter_sequences().len(), 2);
+        assert_eq!(align.iter_sequences().next().unwrap().len(), 8);
+    }
+
+    #[test]
+    fn for_sequences_collect() {
+        let align = Alignment::create(
+            vec![String::from("NAME1"), String::from("NAME2")],
+            vec![String::from("desc1"), String::from("desc2")],
+            &[b"ALKHITAN".to_vec(), b"VLK-ITAN".to_vec()],
+        )
+        .unwrap();
+
+        assert_eq!(align.iter_sequences().len(), 2);
+        assert_eq!(align.iter_sequences().next().unwrap().len(), 8);
     }
 }
