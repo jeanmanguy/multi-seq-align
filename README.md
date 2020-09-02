@@ -2,6 +2,12 @@
 
 ![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 
+[![Rust](https://github.com/jeanmanguy/multi-seq-align/workflows/Rust/badge.svg?branch=master)](https://github.com/jeanmanguy/multi-seq-align/actions?query=workflow%3ARust)
+[![Rust Documentation](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/multi-seq-align)
+[![Crates.io version](https://img.shields.io/crates/v/multi-seq-align)](https://crates.io/crates/multi-seq-align/)
+[![Crates.io license](https://img.shields.io/crates/l/multi-seq-align)](https://github.com/jeanmanguy/multi-seq-align/blob/master/LICENSE)
+
+
 A crate to manipulate multiple sequences alignments in Rust.
 
 Instead of storing aligned sequences as multiple strings, `multi_seq_align` stores bases or residues in `Alignment` using a list of characters, like a matrix. This allows easy access to specific rows and columns of the alignment.
@@ -10,17 +16,7 @@ Instead of storing aligned sequences as multiple strings, `multi_seq_align` stor
 ## Usage
 
 ```rust
-let mut kappa_casein_fragments_alignment = Alignment::create(
-    vec![
-        "P06796".to_string(), // Mouse
-        "P07498".to_string(), // Human
-        "P02668".to_string(), // Cattle
-    ],
-    vec![
-        "CASK_MOUSE".to_string(),
-        "CASK_HUMAN".to_string(),
-        "CASK_BOVIN".to_string(),
-    ],
+let mut kappa_casein_fragments_alignment = Alignment::with_sequences(
     &[
         b"PAPISKWQSMP".to_vec(),
         b"HAQIPQRQYLP".to_vec(),
@@ -36,9 +32,7 @@ assert_eq!(
 
 // But we also have the aligned sequence for the Platypus
 // Let's add it to the original alignment
-kappa_casein_fragments_alignment.add_aligned_sequence(
-    "D0QJA9".to_string(),
-    "D0QJA9_ORNAN".to_string(),
+kappa_casein_fragments_alignment.add(
     b"EHQRP--YVLP".to_vec(),
 )?;
 
@@ -59,8 +53,8 @@ Here I instancied an alignment using `u8`, but `Alignment` works on generics lik
 
 ## Features
 
-- Create [`Alignment`] from one or multiple aligned sequences at once (see [`add_aligned_sequence()`] and [`create()`]).
-- Extract columns of the alignment (see [`nth_position()`]).
+- Create `Alignment` from one or multiple aligned sequences at once (see `add()` and `create()`).
+- Extract columns of the alignment (see `iter_positions()` and `iter_sequences(`).
 This crate is currently in early stage development. I wouldn't recommend using it in production but I am interested in possible ideas to further the developemt of this project. Quite some work needs toi be done to improve the API and make it easy to use in other project.
 
 
