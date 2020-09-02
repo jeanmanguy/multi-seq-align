@@ -10,8 +10,6 @@ pub enum MultiSeqAlignError {
     MultipleSequencesOfDifferentLengths {
         /// Expected length
         expected_length: usize,
-        // /// Names of the problematic sequences
-        // sequences_names: Vec<String>,
         /// Found lengths
         found_lengths: Vec<usize>,
     },
@@ -19,8 +17,6 @@ pub enum MultiSeqAlignError {
     NewSequenceOfDifferentLength {
         /// Expected length
         expected_length: usize,
-        // /// Name of the problematic sequence
-        // sequences_name: String,
         /// Found length
         found_length: usize,
     },

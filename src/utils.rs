@@ -12,7 +12,6 @@ pub fn first_sequence_length<T>(sequences: &[Vec<T>]) -> usize {
 #[inline]
 pub fn check_unequal_lengths<T>(
     seqs: &[Vec<T>],
-    // names: &[String],
     expected: usize,
 ) -> Result<(), MultiSeqAlignError> {
     let mismatches: (Vec<usize>, Vec<usize>) = seqs

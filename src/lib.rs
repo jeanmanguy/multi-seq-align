@@ -138,7 +138,6 @@ where
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         if self.size_hint < usize::max_value() {
-            // ?
             (self.size_hint, Some(self.size_hint))
         } else {
             (usize::max_value(), None)
@@ -330,7 +329,7 @@ impl<T> Alignment<T> {
         self.n_sequences == 0_usize
     }
 
-    /// Create an `Alignment` from same length vectors of names, descriptions, sequences
+    /// Create an `Alignment` from same length vectors sequences
     ///
     /// # Examples
     ///
@@ -351,7 +350,7 @@ impl<T> Alignment<T> {
     ///
     /// # Errors
     ///
-    /// Will return an error if `names`, `descriptions` and `sequences` have different lengths, and also if the sequences have different lengths (based on the first sequence).
+    /// Will return an error if the sequences have different lengths (based on the first sequence).
     pub fn with_sequences(sequences: &[Vec<T>]) -> Result<Self, MultiSeqAlignError>
     where
         T: Clone,
@@ -402,7 +401,6 @@ impl<T> Alignment<T> {
         if sequence.len() != self.length {
             return Err(MultiSeqAlignError::NewSequenceOfDifferentLength {
                 expected_length: self.length,
-                // sequences_name: name,
                 found_length: sequence.len(),
             });
         }
