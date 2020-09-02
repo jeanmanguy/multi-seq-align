@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added 
+ 
+### Changed
+
+### Removed
+
+## [0.1.0] - 2020-09-02
+
+### Added 
 
 - `Alignment` struct
 - getters
 - constructors (`new`, `create`, `add_aligned_sequence`)
 - iterators (by position and by sequence)
- 
-### Changed
-
-### Removed
