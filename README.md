@@ -1,6 +1,7 @@
 # Multi-seq-align
 
 ![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fjeanmanguy%2Fmulti-seq-align.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fjeanmanguy%2Fmulti-seq-align?ref=badge_shield)
 
 [![Rust](https://github.com/jeanmanguy/multi-seq-align/workflows/Rust/badge.svg?branch=master)](https://github.com/jeanmanguy/multi-seq-align/actions?query=workflow%3ARust)
 [![Rust Documentation](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/multi-seq-align)
@@ -84,3 +85,5 @@ Please create a new issue on the [project repository](https://github.com/jeanman
 ## License
 
 Aa-regex is distributed under the terms of the Apache License (Version 2.0). See [LICENSE](./LICENSE) for details.
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fjeanmanguy%2Fmulti-seq-align.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fjeanmanguy%2Fmulti-seq-align?ref=badge_large)
