@@ -6,7 +6,7 @@ use thiserror::Error;
 #[non_exhaustive]
 /// Errors
 pub enum MultiSeqAlignError {
-    /// Expected aligned sequences of length {expected_length}, sequences of lengths: {found_lengths:?}
+    /// Expected aligned sequences of length {expected_length}, found sequences of lengths: {found_lengths:?}
     MultipleSequencesOfDifferentLengths {
         /// Expected length
         expected_length: usize,
